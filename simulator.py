@@ -28,6 +28,9 @@ import numpy
 import logging
 import time
 import galsim
+import pandas as pd
+from astropy.table import Table
+
 
 
 
@@ -43,67 +46,59 @@ def main(argv):
     timei = time.time()
     logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
     logger = logging.getLogger("simulator")
+
+###DEFINE CATALOGUE PARAMETERS###
+    
+    
+    cat_path=argv[1]
+    cat_table=Table.read(cat_path, format='fits')
+    cat_data=cat_table.to_pandas()
+    
+    nobj = len(cat_data)
+   
+    RAall = cat_data.RA
+    DECall = cat_data.DEC 
+    magall = cat_data.mag
+    rhall = cat_data.rh
+    nsersicall = cat_data.nsersic #numpy.random.random(nobj)*10.
+    ell1all = cat_data.ell1 
+    ell2all = cat_data.ell2
+      
+    
+    xsize = 128                      # pixels
+    ysize = 128                      # pixels
+    
+
+######
+    
+    shear1=np.random.uniform(-0.05, 0.05,1)
+    shear2=np.random.uniform(-0.05, 0.05,1)
     
     
 ###DEFINE IMAGE PARAMETERS###
-    num = argv[1] #number to appear in the image name
+
+    image_prop_path=argv[2]
+    image_prop_table=Table.read(image_prop_path, format='fits')
+    image_data=image_prop_table.to_pandas()
 
     random_seed = 8241574
 
-    pixel_scale = 0.1               # arcsec / pixel  (size units in input catalog are pixels)
-    xsize = 128                      # pixels
-    ysize = 128                      # pixels
-    image_size = 640               # pixels
+    pixel_scale = image_data.pixel_scale               # arcsec / pixel  (size units in input catalog are pixels)
+    image_size = image_data.image_size               # pixels
 
-    t_exp = 3*565 #s
-    gain = 3.1 #e-/ADU
-    readoutnoise = 4.2 #e-
-    sky_bkg = 22.35 #mag/arcsec2
+    t_exp = image_data.t_exp #s
+    gain = image_data.gain #e-/ADU
+    readoutnoise = image_data.readoutnoise #e-
+    sky_bkg = image_data.sky_bkg #mag/arcsec2
     
-    ZP=24.0 #mag
+    ZP=image_data.ZP #mag
 
     F_sky = pixel_scale**(2)*t_exp*10**(-(sky_bkg-ZP)/2.5) #e-/pixel
     noise_variance = ( numpy.sqrt( ( (readoutnoise)**2 + F_sky ) ) *1/gain )**2 #e- -> ADU by dividing sigma by gain ; sigma = 4.9ADU
 ######
-    
-###DEFINE GALAXY PARAMETERS###
-    nobj = int(argv[1][1:]) #2
-    """
-    xall = numpy.zeros(nobj)
-    yall = numpy.zeros(nobj)
-    magall = numpy.zeros(nobj)
-    rhall = numpy.zeros(nobj)
-    nsersicall = numpy.zeros(nobj)
-    ell1all = numpy.zeros(nobj)
-    ell2all = numpy.zeros(nobj)
-    """
-    xall = numpy.random.randint(0, image_size, nobj)
-    yall = numpy.random.randint(0, image_size, nobj)
-    magall = numpy.random.randint(18, 21, nobj)
-    rhall = numpy.random.random(nobj)
-    nsersicall = numpy.array([4.]*nobj) #numpy.random.random(nobj)*10.
-    ell1all = numpy.random.randint(2, 6, nobj)/10.
-    ell2all = numpy.random.randint(2, 6, nobj)/10.
 
-    
-    """
-    xall[0] = 320
-    yall[0] = 320
-    magall[0] = 19
-    rhall[0] = 0.7 
-    nsersicall[0] = 1
-    ell1all[0] = 0.6
-    ell2all[0] = 0.3
 
-    xall[1] = 340
-    yall[1] = 360
-    magall[1] = 22
-    rhall[1] = 0.3 
-    nsersicall[1] = 4
-    ell1all[1] = 0.1
-    ell2all[1] = 0.2
-    """
-######
+   
 
 ###DISPLAY INFO###
     logger.info('\nStarting simulator using:')
@@ -132,8 +127,8 @@ def main(argv):
 
 ###CREATE OUTPUT IMAGES###    
     #Create 1st image (bright galaxies only)
-    file_name ='sim_%s_nonoise.fits' %(num)
-    file_name_noise ='sim_%s_noise.fits' %(num)
+    file_name ='sim_%s_nonoise.fits' %(nobj)
+    file_name_noise ='sim_%s_noise.fits' %(nobj)
     full_image = galsim.ImageF(image_size, image_size)
     full_image.setOrigin(1,1)
 ######
@@ -201,8 +196,12 @@ def main(argv):
     for k in range(nobj):
 
         #Read galaxy parameters from catalog
-        x = xall[k]
-        y = yall[k]
+        RA = RAall[k]
+        DEC = DECall[k]
+        
+        world_pos = galsim.CelestialCoord(RA*galsim.degrees, DEC*galsim.degrees)
+        image_pos = wcs.toImage(world_pos)
+        
         mag = magall[k]
         half_light_radius = rhall[k]
         nsersic = nsersicall[k]
@@ -210,16 +209,21 @@ def main(argv):
         ell2 = ell2all[k]
         
         #Get position on sky
-        image_pos = galsim.PositionD(x,y)
-        world_pos = affine.toWorld(image_pos)
+        #image_pos = galsim.PositionD(x,y)
+        #world_pos = affine.toWorld(image_pos)
+        #image_pos = wcs.toImage(world_pos)
+
                         
         #Galaxy is a sersic profile:
         fluxflux = t_exp/gain*10**(-(mag-ZP)/2.5)
         gal = galsim.Sersic(n=nsersic, half_light_radius=half_light_radius, flux=fluxflux, gsparams=gsparams, trunc=half_light_radius*4.5)
         gal = gal.shear(e1=ell1, e2=ell2)
+        gal = gal.shear(g1=shear1, g2=shear2)
+
+        
                     
         #Rotate galaxy
-        #gal = gal.rotate(theta=ang*galsim.degrees)
+        gal = gal.rotate(theta=ang*galsim.degrees)
 
         #convolve galaxy with PSF
         final = galsim.Convolve([psf, gal])
