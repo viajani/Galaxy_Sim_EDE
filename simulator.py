@@ -32,7 +32,31 @@ import pandas as pd
 from astropy.table import Table
 
 
+######## DEFINE FUNCTIONS ##########
 
+def patch_selection(cat, patchsize):
+    ''' Takes a catalog and and slices it into N patches of a given patchsize
+        The patches are returned in a list of len N
+    '''
+    ra_min = np.amin(cat['RA_MAG'])
+    ra_max = np.amax(cat['RA_MAG'])
+    dec_min = np.amin(cat['DEC_MAG'])
+    dec_max = np.amax(cat['DEC_MAG'])
+
+    dra = ra_max-ra_min
+    ddec = dec_max-dec_min
+
+    # build the grid of center points of each tile
+    grid_ra = np.arange(ra_min, ra_max, patchsize)
+    grid_dec = np.arange(dec_min, dec_max, patchsize)
+
+    patches = []
+    for i in range(len(grid_ra)-1):
+        for j in range(len(grid_dec)-1):
+            cond = (cat['RA_MAG'] > grid_ra[i]) & (cat['RA_MAG'] < grid_ra[i+1]) & (cat['DEC_MAG'] > grid_dec[j]) & (cat['DEC_MAG'] < grid_dec[j+1])   
+            patches.append(cat[cond])
+    
+    return patches
 
 
 def main(argv):
@@ -49,20 +73,27 @@ def main(argv):
 
 ###DEFINE CATALOGUE PARAMETERS###
     
-    
+    # loading the full catalogue
     cat_path=argv[1]
     cat_table=Table.read(cat_path, format='fits')
     cat_data=cat_table.to_pandas()
     
-    nobj = len(cat_data)
-   
-    RAall = cat_data.RA
-    DECall = cat_data.DEC 
-    magall = cat_data.mag
-    rhall = cat_data.rh
-    nsersicall = cat_data.nsersic #numpy.random.random(nobj)*10.
-    ell1all = cat_data.ell1 
-    ell2all = cat_data.ell2
+    # slicing the catalogue into patches
+    patchsize = 1/60 #(size of the patch is 1x1 arcmin)
+    patches = patch_selection(cat_data, patchsize)
+
+    # work with one patch at a time
+    for patch in patches:
+
+        nobj.append(len(patch))
+
+        RAall.append(patch.RA)
+        DECall.append(patch.DEC)
+        magall.append(patch.mag)
+        rhall.append(patch.rh)
+        nsersicall.append(patch.nsersic) #numpy.random.random(nobj)*10.
+        ell1all.append(patch.ell1)
+        ell2all.append(patch.ell2)
       
     
     xsize = 128                      # pixels
@@ -125,13 +156,6 @@ def main(argv):
         logger.info('    - ellipticity %.4f,%.4f\n', ell1all[k],ell2all[k])
 ######
 
-###CREATE OUTPUT IMAGES###    
-    #Create 1st image (bright galaxies only)
-    file_name ='sim_%s_nonoise.fits' %(nobj)
-    file_name_noise ='sim_%s_noise.fits' %(nobj)
-    full_image = galsim.ImageF(image_size, image_size)
-    full_image.setOrigin(1,1)
-######
 
 ###MAKE THE WCS COORDINATES (test11)###
     # Make a slightly non-trivial WCS.  We'll use a slightly rotated coordinate system
@@ -193,86 +217,97 @@ def main(argv):
     timeigal = time.time()
     logger.info('\n\nStarting to simulate galaxies')
 
-    for k in range(nobj):
+    # go over the patches
+    for p in range(len(patches)):    
+        ###CREATE OUTPUT IMAGES###    
+        file_name ='sim_patch-%s_nonoise.fits' %(p)
+        file_name_noise ='sim_patch-%s_noise.fits' %(p)
+        full_image = galsim.ImageF(image_size, image_size)
+        full_image.setOrigin(1,1)
+        # at the moment the center of the image and its wcs are the same for each patch. Realistically this should change
+        ######
 
-        #Read galaxy parameters from catalog
-        RA = RAall[k]
-        DEC = DECall[k]
-        
-        world_pos = galsim.CelestialCoord(RA*galsim.degrees, DEC*galsim.degrees)
-        image_pos = wcs.toImage(world_pos)
-        
-        mag = magall[k]
-        half_light_radius = rhall[k]
-        nsersic = nsersicall[k]
-        ell1 = ell1all[k]
-        ell2 = ell2all[k]
-        
-        #Get position on sky
-        #image_pos = galsim.PositionD(x,y)
-        #world_pos = affine.toWorld(image_pos)
-        #image_pos = wcs.toImage(world_pos)
+        for k in range(nobj):
 
-                        
-        #Galaxy is a sersic profile:
-        fluxflux = t_exp/gain*10**(-(mag-ZP)/2.5)
-        gal = galsim.Sersic(n=nsersic, half_light_radius=half_light_radius, flux=fluxflux, gsparams=gsparams, trunc=half_light_radius*4.5)
-        gal = gal.shear(e1=ell1, e2=ell2)
-        gal = gal.shear(g1=shear1, g2=shear2)
+            #Read galaxy parameters from catalog
+            RA = RAall[p][k]
+            DEC = DECall[p][k]
 
-        
-                    
-        #Rotate galaxy
-        gal = gal.rotate(theta=ang*galsim.degrees)
+            world_pos = galsim.CelestialCoord(RA*galsim.degrees, DEC*galsim.degrees)
+            image_pos = wcs.toImage(world_pos)
 
-        #convolve galaxy with PSF
-        final = galsim.Convolve([psf, gal])
-    
-        #offset the center for pixelization (of random fraction of half a pixel)
-        ud = galsim.UniformDeviate(random_seed+k)
-        x_nominal = image_pos.x+0.5
-        y_nominal = image_pos.y+0.5
-        ix_nominal = int(math.floor(x_nominal+0.5))
-        iy_nominal = int(math.floor(y_nominal+0.5))
-        dx = (x_nominal - ix_nominal)*(2*ud()-1)
-        dy = (y_nominal - iy_nominal)*(2*ud()-1)
-        offset = galsim.PositionD(dx,dy)
+            mag = magall[p][k]
+            half_light_radius = rhall[p][k]
+            nsersic = nsersicall[p][k]
+            ell1 = ell1all[p][k]
+            ell2 = ell2all[p][k]
 
-        #draw galaxy
-        image = galsim.ImageF(xsize,ysize,scale=pixel_scale)
-        final.drawImage(image=image,wcs=wcs.local(image_pos), offset=offset)
-        image.setCenter(ix_nominal,iy_nominal)
+            #Get position on sky
+            #image_pos = galsim.PositionD(x,y)
+            #world_pos = affine.toWorld(image_pos)
+            #image_pos = wcs.toImage(world_pos)
 
-        #add stamps to single image
-        bounds = image.bounds & full_image.bounds
-        full_image[bounds] += image[bounds]
 
-    timegal = time.time()
-    logger.info('%d galaxies computed in t=%.2f s',k+1,timegal-timeigal)
-######
+            #Galaxy is a sersic profile:
+            fluxflux = t_exp/gain*10**(-(mag-ZP)/2.5)
+            gal = galsim.Sersic(n=nsersic, half_light_radius=half_light_radius, flux=fluxflux, gsparams=gsparams, trunc=half_light_radius*4.5)
+            gal = gal.shear(e1=ell1, e2=ell2)
+            gal = gal.shear(g1=shear1, g2=shear2)
 
-###WRITE THE FITS FILE BEFORE NOISE###
-    full_image.write(file_name)
-    logger.info('Image without noise written to fits file %r',file_name)
-######
 
-###ADD NOISE###
-    #add Gaussian noise
-    rng = galsim.BaseDeviate(random_seed)
-    noise = galsim.GaussianNoise(rng, sigma=math.sqrt(noise_variance))
-    full_image.addNoise(noise)
-######
 
-###WRITE THE FITS FILE WITH NOISE###
-    full_image.write(file_name_noise)
-    logger.info('Image with noise written to fits file %r',file_name_noise)
-######
+            #Rotate galaxy
+            # angle can also be taken from the catalogue
+            gal = gal.rotate(theta=ang*galsim.degrees)
+
+            #convolve galaxy with PSF
+            final = galsim.Convolve([psf, gal])
+
+            #offset the center for pixelization (of random fraction of half a pixel)
+            ud = galsim.UniformDeviate(random_seed+k)
+            x_nominal = image_pos.x+0.5
+            y_nominal = image_pos.y+0.5
+            ix_nominal = int(math.floor(x_nominal+0.5))
+            iy_nominal = int(math.floor(y_nominal+0.5))
+            dx = (x_nominal - ix_nominal)*(2*ud()-1)
+            dy = (y_nominal - iy_nominal)*(2*ud()-1)
+            offset = galsim.PositionD(dx,dy)
+
+            #draw galaxy
+            image = galsim.ImageF(xsize,ysize,scale=pixel_scale)
+            final.drawImage(image=image,wcs=wcs.local(image_pos), offset=offset)
+            image.setCenter(ix_nominal,iy_nominal)
+
+            #add stamps to single image
+            bounds = image.bounds & full_image.bounds
+            full_image[bounds] += image[bounds]
+
+        timegal = time.time()
+        logger.info('%d galaxies computed in t=%.2f s',k+1,timegal-timeigal)
+    ######
+
+    ###WRITE THE FITS FILE BEFORE NOISE###
+        full_image.write(file_name)
+        logger.info('Image without noise written to fits file %r',file_name)
+    ######
+
+    ###ADD NOISE###
+        #add Gaussian noise
+        rng = galsim.BaseDeviate(random_seed)
+        noise = galsim.GaussianNoise(rng, sigma=math.sqrt(noise_variance))
+        full_image.addNoise(noise)
+    ######
+
+    ###WRITE THE FITS FILE WITH NOISE###
+        full_image.write(file_name_noise)
+        logger.info('Image with noise written to fits file %r',file_name_noise)
+    ######
 
 
     timef = time.time()
     tot_time = timef-timegal
     logger.info('Noise added and image written to files in t=%.2f s',tot_time)
-    
+
     tot_time = timef-timei
     logger.info('\nFull simulation run in t=%.2f s',tot_time)
 
