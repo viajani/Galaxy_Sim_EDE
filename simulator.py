@@ -58,6 +58,15 @@ def patch_selection(cat, patchsize):
     
     return patches
 
+def get_ell_12(q, fi):
+    ''' Computes the two components of the ellipticity
+        given the axis ration q=b/a and the angle fi
+        Returns ell1 and ell2
+    '''
+    ell_compl = (1-q)/(1+q) * np.exp(2j*np.radians(fi))
+    ell1 = np.abs(ell_compl) * np.cos(2*np.radians(fi))
+    ell2 = np.abs(ell_compl) * np.sin(2*np.radians(fi))
+    return ell1, ell2
 
 def main(argv):
     """
@@ -74,27 +83,42 @@ def main(argv):
 ###DEFINE CATALOGUE PARAMETERS###
     
     # loading the full catalogue
-    cat_path=argv[1]
+#     cat_path=argv[1]
+    cat_path = 'data/EUCLID_TU_CATsel_v1.fits'
     cat_table=Table.read(cat_path, format='fits')
-    cat_data=cat_table.to_pandas()
+#     cat_data=cat_table.to_pandas()
     
     # slicing the catalogue into patches
     patchsize = 1/60 #(size of the patch is 1x1 arcmin)
-    patches = patch_selection(cat_data, patchsize)
+    patches = patch_selection(cat_table, patchsize)
 
     # work with one patch at a time
-    for patch in patches:
+    nobj=[]
+    RAall=[]
+    DECall=[]
+    magall=[]
+    rhDall=[]
+    rhBall=[]
+    nsersicall=[]
+    ell1all=[]
+    ell2all=[]
+    diskangleall=[]
 
+    # work with one patch at a time, store the needed quantities for every patch in a list
+    for patch in patches:
         nobj.append(len(patch))
 
-        RAall.append(patch.RA)
-        DECall.append(patch.DEC)
-        magall.append(patch.mag)
-        rhall.append(patch.rh)
-        nsersicall.append(patch.nsersic) #numpy.random.random(nobj)*10.
-        ell1all.append(patch.ell1)
-        ell2all.append(patch.ell2)
-      
+        RAall.append(patch['RA_MAG'])
+        DECall.append(patch['DEC_MAG'])
+        magall.append(patch['VIS'])
+        rhDall.append(patch['DISK_LENGTH'])
+        rhBall.append(patch['BULGE_LENGTH'])
+        # nsersicall at the moment is not read. it will be assigned either 1 or 4 if galaxy is disk or elliptical
+        # not sure if 'DISK_ANGLE' is in fact the fi angle that computes the ellipticity compontents
+        ell1, ell2 = get_ell_12(patch['DISK_AXIS_RATIO'], patch['DISK_ANGLE'])
+        ell1all.append(ell1)
+        ell2all.append(ell2)
+        diskangleall.append(patch['DISK_ANGLE'])
     
     xsize = 128                      # pixels
     ysize = 128                      # pixels
@@ -106,23 +130,45 @@ def main(argv):
     shear2=np.random.uniform(-0.05, 0.05,1)
     
     
-###DEFINE IMAGE PARAMETERS###
+# ###DEFINE IMAGE PARAMETERS###
 
-    image_prop_path=argv[2]
-    image_prop_table=Table.read(image_prop_path, format='fits')
-    image_data=image_prop_table.to_pandas()
+#     image_prop_path=argv[2]
+#     image_prop_table=Table.read(image_prop_path, format='fits')
+#     image_data=image_prop_table.to_pandas()
+
+#     random_seed = 8241574
+
+#     pixel_scale = image_data.pixel_scale               # arcsec / pixel  (size units in input catalog are pixels)
+#     image_size = image_data.image_size               # pixels
+
+#     t_exp = image_data.t_exp #s
+#     gain = image_data.gain #e-/ADU
+#     readoutnoise = image_data.readoutnoise #e-
+#     sky_bkg = image_data.sky_bkg #mag/arcsec2
+    
+#     ZP=image_data.ZP #mag
+
+#     F_sky = pixel_scale**(2)*t_exp*10**(-(sky_bkg-ZP)/2.5) #e-/pixel
+#     noise_variance = ( numpy.sqrt( ( (readoutnoise)**2 + F_sky ) ) *1/gain )**2 #e- -> ADU by dividing sigma by gain ; sigma = 4.9ADU
+######
+
+
+###DEFINE IMAGE PARAMETERS###
+    num = argv[1] #number to appear in the image name
 
     random_seed = 8241574
 
-    pixel_scale = image_data.pixel_scale               # arcsec / pixel  (size units in input catalog are pixels)
-    image_size = image_data.image_size               # pixels
+    pixel_scale = 0.1               # arcsec / pixel  (size units in input catalog are pixels)
+    xsize = 128                      # pixels
+    ysize = 128                      # pixels
+    image_size = np.int(60/0.1)               # pixels
 
-    t_exp = image_data.t_exp #s
-    gain = image_data.gain #e-/ADU
-    readoutnoise = image_data.readoutnoise #e-
-    sky_bkg = image_data.sky_bkg #mag/arcsec2
+    t_exp = 3*565 #s
+    gain = 3.1 #e-/ADU
+    readoutnoise = 4.2 #e-
+    sky_bkg = 22.35 #mag/arcsec2
     
-    ZP=image_data.ZP #mag
+    ZP=24.0 #mag
 
     F_sky = pixel_scale**(2)*t_exp*10**(-(sky_bkg-ZP)/2.5) #e-/pixel
     noise_variance = ( numpy.sqrt( ( (readoutnoise)**2 + F_sky ) ) *1/gain )**2 #e- -> ADU by dividing sigma by gain ; sigma = 4.9ADU
@@ -131,7 +177,7 @@ def main(argv):
 
    
 
-###DISPLAY INFO###
+###DISPLAY IMAGE INFO###
     logger.info('\nStarting simulator using:')
     logger.info('    - pixel scale = %.2f arcsec',pixel_scale)
     logger.info('    - Image size = %.0f pixels', image_size)
@@ -147,13 +193,6 @@ def main(argv):
     logger.info('    - Sersic galaxies')
     logger.info('    - Number of galaxies = %.0f\n', nobj)
 
-    for k in range(nobj):
-        logger.info('    - Galaxy %.0f', k)
-        logger.info('    - position %.0f,%.0f', xall[k],yall[k])
-        logger.info('    - magnitude %.2f', magall[k])
-        logger.info('    - half-light radius %.2f', rhall[k])
-        logger.info('    - sersic index %.2f', nsersicall[k])
-        logger.info('    - ellipticity %.4f,%.4f\n', ell1all[k],ell2all[k])
 ######
 
 
@@ -169,21 +208,21 @@ def main(argv):
     dudy = -numpy.sin(theta) * pixel_scale
     dvdx = numpy.sin(theta) * pixel_scale
     dvdy = numpy.cos(theta) * pixel_scale
-    image_center = full_image.true_center
-    affine = galsim.AffineTransform(dudx, dudy, dvdx, dvdy, origin=full_image.true_center)
 
-    # We can also put it on the celestial sphere to give it a bit more realism.
-    # The TAN projection takes a (u,v) coordinate system on a tangent plane and projects
-    # that plane onto the sky using a given point as the tangent point.  The tangent 
-    # point should be given as a CelestialCoord.
-    sky_center = galsim.CelestialCoord(ra=3.544151*galsim.hours, dec=-27.791371*galsim.degrees)
-    # The third parameter, units, defaults to arcsec, but we make it explicit here.
-    # It sets the angular units of the (u,v) intermediate coordinate system.
+#     image_center = full_image.true_center
+#     affine = galsim.AffineTransform(dudx, dudy, dvdx, dvdy, origin=full_image.true_center)
 
-    wcs = galsim.TanWCS(affine, sky_center, units=galsim.arcsec)
-    full_image.wcs = wcs
+#     # We can also put it on the celestial sphere to give it a bit more realism.
+#     # The TAN projection takes a (u,v) coordinate system on a tangent plane and projects
+#     # that plane onto the sky using a given point as the tangent point.  The tangent 
+#     # point should be given as a CelestialCoord.
+#     sky_center = galsim.CelestialCoord(ra=3.544151*galsim.hours, dec=-27.791371*galsim.degrees)
+#     # The third parameter, units, defaults to arcsec, but we make it explicit here.
+#     # It sets the angular units of the (u,v) intermediate coordinate system.
 
-    logger.info('Image %r and %r created',file_name,file_name_noise)
+#     wcs = galsim.TanWCS(affine, sky_center, units=galsim.arcsec)
+#     full_image.wcs = wcs
+
 ######
 
 
@@ -219,33 +258,55 @@ def main(argv):
 
     # go over the patches
     for p in range(len(patches)):    
+#     for p in range(5):    
         ###CREATE OUTPUT IMAGES###    
-        file_name ='sim_patch-%s_nonoise.fits' %(p)
-        file_name_noise ='sim_patch-%s_noise.fits' %(p)
+        file_name ='output/sim_patch-%s_nonoise.fits' %(p)
+        file_name_noise ='output/sim_patch-%s_noise.fits' %(p)
         full_image = galsim.ImageF(image_size, image_size)
         full_image.setOrigin(1,1)
+        image_center = full_image.true_center
+        affine = galsim.AffineTransform(dudx, dudy, dvdx, dvdy, origin=full_image.true_center)
+        ra_cent = np.mean(RAall[p])
+        dec_cent = np.mean(DECall[p])
+        sky_center = galsim.CelestialCoord(ra=ra_cent*galsim.degrees, dec=dec_cent*galsim.degrees)
+        wcs = galsim.TanWCS(affine, sky_center, units=galsim.arcsec)
+        full_image.wcs = wcs
+        logger.info('Image %r and %r created',file_name,file_name_noise)
+        
         # at the moment the center of the image and its wcs are the same for each patch. Realistically this should change
         ######
 
-        for k in range(nobj):
-
+        for k in range(nobj[p]):
             #Read galaxy parameters from catalog
             RA = RAall[p][k]
             DEC = DECall[p][k]
-
+            # from RA,DEC get pixel position on the image
             world_pos = galsim.CelestialCoord(RA*galsim.degrees, DEC*galsim.degrees)
             image_pos = wcs.toImage(world_pos)
-
+            
+            ## if disk galaxy, rh is the disk length and sersic is 1
+            ## if elliptical galaxy, rh is bulge lenght and sersic is 4
+            if rhDall != 0:
+                half_light_radius = rhDall[p][k]
+                nsersic=1
+            else:
+                half_light_radius = rhBall[p][k]
+                nsersic=4
+                
             mag = magall[p][k]
-            half_light_radius = rhall[p][k]
-            nsersic = nsersicall[p][k]
             ell1 = ell1all[p][k]
             ell2 = ell2all[p][k]
-
-            #Get position on sky
-            #image_pos = galsim.PositionD(x,y)
-            #world_pos = affine.toWorld(image_pos)
-            #image_pos = wcs.toImage(world_pos)
+            diskangle = diskangleall[p][k]
+                        
+            ### DISPLAY INFO FOR GALAXIES IN PATCH###
+            logger.info('    - Patch %.0f', p)
+            logger.info('    - Galaxy %.0f', k)
+            logger.info('    - position RA,DEC %.3f,%.3f', RA, DEC)
+            logger.info('    - position X,Y %.0f,%.0f', image_pos.x, image_pos.y)
+            logger.info('    - magnitude %.2f', mag)
+            logger.info('    - half-light radius %.2f', half_light_radius)
+            logger.info('    - sersic index %.2f', nsersic)
+            logger.info('    - ellipticity %.4f,%.4f\n', ell1,ell2)
 
 
             #Galaxy is a sersic profile:
@@ -255,9 +316,8 @@ def main(argv):
             gal = gal.shear(g1=shear1, g2=shear2)
 
 
-
             #Rotate galaxy
-            # angle can also be taken from the catalogue
+            ang = diskangle
             gal = gal.rotate(theta=ang*galsim.degrees)
 
             #convolve galaxy with PSF
