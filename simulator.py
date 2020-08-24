@@ -102,6 +102,8 @@ def main(argv):
     nsersicall=[]
     ell1all=[]
     ell2all=[]
+    shear1all=[]
+    shear2all=[]
     diskangleall=[]
 
     # work with one patch at a time, store the needed quantities for every patch in a list
@@ -118,6 +120,8 @@ def main(argv):
         ell1, ell2 = get_ell_12(patch['DISK_AXIS_RATIO'], patch['DISK_ANGLE'])
         ell1all.append(ell1)
         ell2all.append(ell2)
+        shear1all.append(patch['GAMMA1'])
+        shear2all.append(patch['GAMMA2'])
         diskangleall.append(patch['DISK_ANGLE'])
     
     xsize = 128                      # pixels
@@ -126,8 +130,8 @@ def main(argv):
 
 ######
     
-    shear1=np.random.uniform(-0.05, 0.05,1)
-    shear2=np.random.uniform(-0.05, 0.05,1)
+#     shear1=np.random.uniform(-0.05, 0.05,1)
+#     shear2=np.random.uniform(-0.05, 0.05,1)
     
     
 # ###DEFINE IMAGE PARAMETERS###
@@ -296,6 +300,9 @@ def main(argv):
             mag = magall[p][k]
             ell1 = ell1all[p][k]
             ell2 = ell2all[p][k]
+            # the shear for a galaxy is the mean shear of the patch
+            shear1 = np.mean(shear1all[p])
+            shear2 = np.mean(shear2all[p])
             diskangle = diskangleall[p][k]
                         
             ### DISPLAY INFO FOR GALAXIES IN PATCH###
