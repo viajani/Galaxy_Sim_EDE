@@ -24,7 +24,7 @@ Short description
 import sys
 import os
 import math
-import numpy
+import numpy as np
 import logging
 import time
 import galsim
@@ -175,7 +175,7 @@ def main(argv):
     ZP=24.0 #mag
 
     F_sky = pixel_scale**(2)*t_exp*10**(-(sky_bkg-ZP)/2.5) #e-/pixel
-    noise_variance = ( numpy.sqrt( ( (readoutnoise)**2 + F_sky ) ) *1/gain )**2 #e- -> ADU by dividing sigma by gain ; sigma = 4.9ADU
+    noise_variance = ( np.sqrt( ( (readoutnoise)**2 + F_sky ) ) *1/gain )**2 #e- -> ADU by dividing sigma by gain ; sigma = 4.9ADU
 ######
 
 
@@ -191,7 +191,7 @@ def main(argv):
     
     logger.info('\n    - Sky background = %.2f mag/arcsec2', sky_bkg)
     logger.info('    - Read-out noise = %.1f e-', readoutnoise)
-    logger.info('    - Gaussian noise (sigma = %.2f ADU/pixel)', numpy.sqrt(noise_variance))
+    logger.info('    - Gaussian noise (sigma = %.2f ADU/pixel)', np.sqrt(noise_variance))
 
     logger.info('\n    - Airy PSF (lam=600,700,800, diam=1.2, obscuration=0.3)')
     logger.info('    - Sersic galaxies')
@@ -208,10 +208,10 @@ def main(argv):
     #dudy = -math.sin(theta.rad()) * pixel_scale
     #dvdx = math.sin(theta.rad()) * pixel_scale
     #dvdy = math.cos(theta.rad()) * pixel_scale
-    dudx = numpy.cos(theta) * pixel_scale
-    dudy = -numpy.sin(theta) * pixel_scale
-    dvdx = numpy.sin(theta) * pixel_scale
-    dvdy = numpy.cos(theta) * pixel_scale
+    dudx = np.cos(theta) * pixel_scale
+    dudy = -np.sin(theta) * pixel_scale
+    dvdx = np.sin(theta) * pixel_scale
+    dvdy = np.cos(theta) * pixel_scale
 
 #     image_center = full_image.true_center
 #     affine = galsim.AffineTransform(dudx, dudy, dvdx, dvdy, origin=full_image.true_center)
