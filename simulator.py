@@ -274,8 +274,9 @@ def main(argv):
             ell1 = ell1all[p][k]
             ell2 = ell2all[p][k]
             # the shear for a galaxy is the mean shear of the patch
-            shear1 = np.mean(shear1all[p])
-            shear2 = np.mean(shear2all[p])
+            shear1 = shear1all[p][k]#np.mean(shear1all[p])
+            shear2 = shear2all[p][k]#np.mean(shear2all[p])
+
             diskangle = diskangleall[p][k]
                         
 #             ### DISPLAY INFO FOR GALAXIES IN PATCH###
@@ -318,6 +319,7 @@ def main(argv):
             image = galsim.ImageF(xsize,ysize,scale=pixel_scale)
             final.drawImage(image=image,wcs=wcs.local(image_pos), offset=offset)
             image.setCenter(ix_nominal,iy_nominal)
+            image_noise = galsim.Image(image, dtype=numpy.float64, copy=False)
             
             #add stamps to single image
             bounds = image.bounds & full_image.bounds
@@ -331,7 +333,6 @@ def main(argv):
             # ## add noise
             rng_gal = galsim.BaseDeviate(random_seed)
             noise_gal = galsim.GaussianNoise(rng_gal, sigma=math.sqrt(noise_variance))
-            image_noise = image
             image_noise.addNoise(noise_gal)
 #             image_noise.write(stamps_path+'_noise.fits')
             stamps_noise.append(image_noise)
